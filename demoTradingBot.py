@@ -138,7 +138,7 @@ class DemoTradingBot:
         self.ws = await websockets.connect(self.uri)
         welcome_data = json.loads(await self.ws.recv())
         welcome_message = WelcomeMessage(**welcome_data)
-        
+
         print(json.dumps({"welcome": asdict(welcome_message)}, indent=2))
         asyncio.create_task(self._receive_loop())
 
@@ -156,27 +156,6 @@ class DemoTradingBot:
                 del self._pending[rid]
 
             msg_type = data.get("type")
-            if msg_type == "market_data_update":
-                try:
-                    parsed_orderbook_depths = {
-                        instr_id: OrderbookDepth(**depth_data)
-                        for instr_id, depth_data in data.get("orderbook_depths", {}).items()
-                    }
-                    parsed_candles = CandleDataResponse(**data.get("candles", {}))
-
-                    market_data = MarketDataResponse(
-                        type=data["type"],
-                        time=data["time"],
-                        candles=parsed_candles,
-                        orderbook_depths=parsed_orderbook_depths,
-                        events=data.get("events", []),
-                        user_request_id=data.get("user_request_id")
-                    )
-                    self._handle_market_data_update(market_data)
-                except KeyError as e:
-                    print(f"Error: Missing expected key in MarketDataResponse: {e}. Data: {data}")
-                except Exception as e:
-                    print(f"Error deserializing MarketDataResponse: {e}. Data: {data}")
 
     def _handle_market_data_update(self, data: MarketDataResponse):
         if self._trade_sequence_triggered:
@@ -206,7 +185,7 @@ class DemoTradingBot:
 
                 self._trade_sequence_triggered = True
                 self._instrument_ids.add(instr)
-                
+
                 asyncio.create_task(self.run_sequence(instr, price))
                 return
 
@@ -301,7 +280,7 @@ class DemoTradingBot:
             # --- Buy Order ---
             print("1) Sending Buy Order...")
             buy_resp = await self.buy(instr, price)
-            
+
             if isinstance(buy_resp, AddOrderResponse) and buy_resp.success:
                 print(f"   Buy Order SUBMISSION SUCCESS. OrderID: {buy_resp.data.order_id}")
             else:
@@ -313,9 +292,9 @@ class DemoTradingBot:
                 else:
                     error_message = f" (Timeout or Unexpected response type: {type(buy_resp)})"
                 print(f"   Buy Order SUBMISSION FAILED{error_message}. Aborting sequence.")
-                return 
+                return
 
-            # --- Get Inventory ---
+                # --- Get Inventory ---
             print("2) Getting Inventory after buy...")
             inventory_resp_after_buy = await self.get_inventory()
             initial_instrument_owned_quantity = 0
@@ -326,7 +305,8 @@ class DemoTradingBot:
                 reserved, owned = inventory_resp_after_buy.data.get(instr, (0, 0))
                 initial_instrument_reserved_quantity = reserved
                 initial_instrument_owned_quantity = owned
-                print(f"   Current Inventory for {instr}: {initial_instrument_owned_quantity} owned, {initial_instrument_reserved_quantity} reserved.")
+                print(
+                    f"   Current Inventory for {instr}: {initial_instrument_owned_quantity} owned, {initial_instrument_reserved_quantity} reserved.")
             else:
                 error_message = ""
                 if isinstance(inventory_resp_after_buy, ErrorResponse):
@@ -337,7 +317,8 @@ class DemoTradingBot:
                 return
 
             if initial_instrument_owned_quantity <= 0:
-                print(f"   Warning: Did not acquire {instr} after buy order (owned quantity is 0). Skipping sell attempts.")
+                print(
+                    f"   Warning: Did not acquire {instr} after buy order (owned quantity is 0). Skipping sell attempts.")
                 return
 
             # --- Sell Order ---
@@ -358,10 +339,11 @@ class DemoTradingBot:
                 else:
                     error_message = f" (Timeout or Unexpected response type: {type(sell_resp)})"
                 print(f"   Sell Order SUBMISSION FAILED{error_message}. No order was placed to cancel.")
-            
+
             # --- Wait for Sell Order / Cancel if needed ---
             if sell_order_successfully_submitted and sell_order_id_to_check:
-                print(f"4) Sell order was successfully submitted. Waiting for it to FILL or TIMEOUT ({5} seconds max), checking pending orders...")
+                print(
+                    f"4) Sell order was successfully submitted. Waiting for it to FILL or TIMEOUT ({5} seconds max), checking pending orders...")
                 max_wait_time_for_fill = 5
                 poll_interval = 0.5
                 waited_time = 0
@@ -381,20 +363,22 @@ class DemoTradingBot:
                                     order_found_in_pending = True
                                     print(f"   [{waited_time:.1f}s] Sell order {sell_order_id_to_check} still LIVE.")
                                     break
-                        
+
                         order_still_pending = order_found_in_pending
 
                         if not order_still_pending:
                             print(f"   Sell order was successful.")
-                            break 
+                            break
                     else:
-                        print(f"   [{waited_time:.1f}s] Failed to get pending orders during poll: {pending_orders_resp}. Cannot confirm if order is pending.")
-                
+                        print(
+                            f"   [{waited_time:.1f}s] Failed to get pending orders during poll: {pending_orders_resp}. Cannot confirm if order is pending.")
+
                 print(f"5) Final check after {max_wait_time_for_fill}s wait for sell order {sell_order_id_to_check}:")
                 print(f"   - Order still pending (based on last poll): {order_still_pending}.")
 
                 if sell_order_successfully_submitted and sell_order_id_to_check and order_still_pending:
-                    print(f"   Sell order (ID: {sell_order_id_to_check}) still PENDING after TIMEOUT. Initiating cancellation...")
+                    print(
+                        f"   Sell order (ID: {sell_order_id_to_check}) still PENDING after TIMEOUT. Initiating cancellation...")
                     cancel_response = await self.cancel(instr, sell_order_id_to_check)
                     if isinstance(cancel_response, CancelOrderResponse) and cancel_response.success:
                         print(f"      Cancellation SUCCESS. Message: '{cancel_response.message}'.")
@@ -408,9 +392,10 @@ class DemoTradingBot:
                             error_message = f" (Timeout or Unexpected response type: {type(cancel_response)})"
                         print(f"      Cancellation FAILED{error_message}.")
                 elif sell_order_successfully_submitted and sell_order_id_to_check and not order_still_pending:
-                    pass # Message 'Sell order was successful.' already printed within the loop.
+                    pass  # Message 'Sell order was successful.' already printed within the loop.
                 else:
-                    print("   Sell order was NOT SUCCESSFULLY SUBMITTED, or no order ID. No cancellation possible or needed.")
+                    print(
+                        "   Sell order was NOT SUCCESSFULLY SUBMITTED, or no order ID. No cancellation possible or needed.")
 
             else:
                 print("4) Sell order was not submitted successfully. No waiting or cancellation needed.")
