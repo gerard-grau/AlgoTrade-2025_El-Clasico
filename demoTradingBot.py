@@ -1,5 +1,7 @@
 import asyncio
 import json
+import time
+from collections import defaultdict, deque
 import websockets
 from dataclasses import dataclass, asdict, field
 from typing import Optional, List, Dict, Tuple, Any
@@ -418,6 +420,108 @@ class DemoTradingBot:
             print(f"An unexpected error occurred during trading sequence: {e}")
         finally:
             self._trade_sequence_triggered = False
+
+class RiskManager:
+    def __init__(
+        self,
+        starting_capital=1_000_000,
+        max_risk_per_trade=0.02,         # 2%
+        max_exposure_per_symbol=0.1,     # 10% of capital
+        max_drawdown_pct=0.2,            # 20% drawdown threshold
+        max_pending_orders=600,
+        max_connections=10,
+        max_connections_per_sec=10,
+        max_messages_per_sec=300
+    ):
+        self.starting_capital = starting_capital
+        self.capital = starting_capital
+        self.net_worth = starting_capital
+        self.max_risk_per_trade = max_risk_per_trade
+        self.max_exposure_per_symbol = max_exposure_per_symbol
+        self.max_drawdown = starting_capital * (1 - max_drawdown_pct)
+        self.max_pending_orders = max_pending_orders
+
+        self.positions = defaultdict(float)        # symbol -> position value
+        self.pending_orders = deque()              # [(timestamp, symbol, qty, price)]
+        self.recent_messages = deque()             # for rate limiting
+        self.recent_connections = deque()          # timestamps
+
+        self.max_connections = max_connections
+        self.max_connections_per_sec = max_connections_per_sec
+        self.max_messages_per_sec = max_messages_per_sec
+
+        self.halt_trading = False
+
+    def update_net_worth(self, new_value):
+        self.net_worth = new_value
+        if self.net_worth < self.max_drawdown:
+            self.halt_trading = True
+
+    def can_trade(self):
+        return not self.halt_trading
+
+    def update_position(self, symbol, value):
+        self.positions[symbol] += value
+
+    def clear_position(self, symbol):
+        self.positions[symbol] = 0
+
+    def record_order(self, symbol, quantity, price):
+        timestamp = time.time()
+        self.pending_orders.append((timestamp, symbol, quantity, price))
+        if len(self.pending_orders) > self.max_pending_orders:
+            self.pending_orders.popleft()
+
+    def can_place_order(self, symbol, price, quantity):
+        if self.halt_trading:
+            return False
+
+        # Risk check
+        trade_value = price * quantity
+        if trade_value > self.capital * self.max_risk_per_trade:
+            return False
+
+        # Exposure check
+        current_exposure = self.positions[symbol]
+        if (current_exposure + trade_value) > self.capital * self.max_exposure_per_symbol:
+            return False
+
+        # Pending orders limit
+        if len(self.pending_orders) >= self.max_pending_orders:
+            return False
+
+        return True
+
+    def can_connect(self):
+        now = time.time()
+        self.recent_connections.append(now)
+
+        # Remove expired timestamps
+        while self.recent_connections and now - self.recent_connections[0] > 1:
+            self.recent_connections.popleft()
+
+        return len(self.recent_connections) <= self.max_connections_per_sec
+
+    def can_send_message(self):
+        now = time.time()
+        self.recent_messages.append(now)
+
+        # Remove messages older than 1 sec
+        while self.recent_messages and now - self.recent_messages[0] > 1:
+            self.recent_messages.popleft()
+
+        return len(self.recent_messages) <= self.max_messages_per_sec
+
+    def reset(self):
+        self.capital = self.starting_capital
+        self.net_worth = self.starting_capital
+        self.positions.clear()
+        self.pending_orders.clear()
+        self.recent_messages.clear()
+        self.recent_connections.clear()
+        self.halt_trading = False
+
+
 
 async def main():
     EXCHANGE_URI = "ws://192.168.100.10:9001/trade"
