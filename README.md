@@ -1,1 +1,1 @@
-# AlgoTrade-2025_El-Classico
+# AlgoTrade-2025_El-Clasico
