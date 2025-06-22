@@ -11,7 +11,7 @@ A sophisticated algorithmic trading system that uses **Put-Call Parity** signals
 
 ## 📊 Trading Strategy: Put-Call Parity Signal
 
-The primary trading strategy, implemented in `fixedDemoTradingBot.py`, uses the Put-Call Parity principle as a signal generator for placing trades. It is a form of statistical arbitrage rather than a pure, risk-free arbitrage.
+The primary trading strategy, implemented in `src/bots/main_bot.py`, uses the Put-Call Parity principle as a signal generator for placing trades. It is a form of statistical arbitrage rather than a pure, risk-free arbitrage.
 
 **Core Logic**:
 1.  **Real-Time Pricing**: The bot continuously calculates weighted average prices for futures, calls, and puts from the live order book.
@@ -29,13 +29,13 @@ We use a LightGBM-based machine learning pipeline to forecast future asset price
 To run the full pipeline from data processing to model training and evaluation:
 ```bash
 # 1. Preprocess data and create features
-python Prediction-model/preprocessing-with-correlation.py
+python src/ml_pipeline/preprocess.py
 
 # 2. Train the prediction models
-python Prediction-model/train-model.py
+python src/ml_pipeline/train.py
 
 # 3. Evaluate model performance
-python Prediction-model/evaluate-and-plot.py
+python src/ml_pipeline/evaluate.py
 ```
 
 ### Feature Engineering
@@ -55,12 +55,12 @@ The project's architecture is designed to separate data handling, model training
 
 **Data Flow:**
 
-1.  **Data Collection**: `store-underlying-assets.py` captures live data from the `Exchange WebSocket` and saves it into the `market-data/` directory.
-2.  **ML Preprocessing**: `preprocessing-with-correlation.py` reads the raw data, engineers features, and stores the result in `processed-data/`.
-3.  **Model Training**: `train-model.py` uses the processed data to train the LightGBM models, which are saved in `models-4-predictions/`.
+1.  **Data Collection**: `src/data_utils/collector.py` captures live data from the `Exchange WebSocket` and saves it into the `data/raw/` directory.
+2.  **ML Preprocessing**: `src/ml_pipeline/preprocess.py` reads the raw data, engineers features, and stores the result in `data/processed/`.
+3.  **Model Training**: `src/ml_pipeline/train.py` uses the processed data to train the LightGBM models, which are saved in `models/`.
 4.  **Trading**:
-    *   `bot-with-lightgbm-predictor.py` loads the trained models to inform its trading decisions.
-    *   `fixedDemoTradingBot-put-call-parity.py` trades based on the put-call parity strategy without relying on the ML models.
+    *   `src/bots/ml_bot.py` loads the trained models to inform its trading decisions.
+    *   `src/bots/main_bot.py` trades based on the put-call parity strategy without relying on the ML models.
 
 This can be visualized as:
 ```
@@ -84,42 +84,49 @@ pip install -r requirements.txt
 
 Before running a bot, you may need to configure its parameters.
 
-- **Team Secret**: Set your `TEAM_SECRET` in the corresponding Python file:
+- **Team Secret**: Set your `TEAM_SECRET` in the corresponding Python file (e.g., `src/bots/main_bot.py`):
   ```python
   TEAM_SECRET = "your-team-secret-here"
   ```
-- **Arbitrage Strategy**: In `fixedDemoTradingBot-put-call-parity.py`, you can adjust the `threshold` to define the minimum profit edge required to trigger an arbitrage trade.
-- **ML-Based Strategy**: In `bot-with-lightgbm-predictor.py`, you can modify parameters related to trade logic, although the core settings are tied to the trained models.
+- **Arbitrage Strategy**: In `src/bots/main_bot.py`, you can adjust the `threshold` to define the minimum profit edge required to trigger an arbitrage trade.
+- **ML-Based Strategy**: In `src/bots/ml_bot.py`, you can modify parameters related to trade logic, although the core settings are tied to the trained models.
 
 ### Running a Bot
 To run the primary arbitrage bot:
 ```bash
-python fixedDemoTradingBot-put-call-parity.py
+python src/bots/main_bot.py
 ```
 
 ## 📁 Project Structure
 
-The repository is organized into the following key components:
+The repository is organized into a clean, modular structure:
 
-- **`Trading Bots`**: Contains the main trading algorithms.
-    - `fixedDemoTradingBot-put-call-parity.py`: **(Primary)** The main bot implementing the Put-Call Parity arbitrage strategy.
-    - `bot-with-lightgbm-predictor.py`: An experimental bot that integrates the ML prediction pipeline.
-    - `fixedDemoTradingBot.py` & `demoTradingBot.py`: Earlier versions of the trading bot, kept for reference.
+- **`src/`**: All Python source code.
+    - **`bots/`**: Contains the main trading algorithms.
+        - `main_bot.py`: The primary bot implementing the Put-Call Parity arbitrage strategy.
+        - `ml_bot.py`: An experimental bot that integrates the ML prediction pipeline.
+        - `archive/`: Earlier versions of the trading bots for reference.
+    - **`data_utils/`**: Scripts for data handling.
+        - `collector.py`: Captures and saves live market data.
+        - `inspector.py`: A debugging tool to inspect raw WebSocket messages.
+    - **`ml_pipeline/`**: The complete machine learning pipeline for price forecasting.
+        - `preprocess.py`: Cleans data and engineers features.
+        - `train.py`: Trains the LightGBM prediction models.
+        - `evaluate.py`: Validates model performance.
 
-- **`Prediction-model/`**: The complete machine learning pipeline for price forecasting.
-    - `preprocessing-with-correlation.py`: Cleans data and engineers features.
-    - `train-model.py`: Trains the LightGBM prediction models.
-    - `evaluate-and-plot.py`: Validates model performance.
-    - `Preprocessing.ipynb` & `train-notebook.ipynb`: Notebooks for interactive development.
-    - `models-4-predictions/`: Stores trained model artifacts.
-    - `processed_data/`: Contains processed data for model training.
+- **`data/`**: All project data, separated by type.
+    - `raw/`: Raw, unprocessed market data collected from the exchange.
+    - `processed/`: Processed data with engineered features, ready for model training.
+    - `bad/`: A collection of market data with known anomalies for robust testing.
 
-- **`Data & Utilities`**:
-    - `store-underlying-assets.py`: Captures and saves live market data.
-    - `see-messages.py`: A debugging tool to inspect raw WebSocket messages.
-    - `market-data/`: Contains raw market data (JSON files with OHLCV candles).
-    - `processed-data/`: Stores the master datasets (Parquet files) with engineered features like moving averages and MACD.
-    - `BAD-market-data/`: Contains data with known anomalies for robust testing.
+- **`models/`**: Stores trained model artifacts (e.g., LightGBM models).
+
+- **`notebooks/`**: Jupyter notebooks for interactive development and analysis.
+    - `preprocessing.ipynb`: Notebook for developing the data preprocessing steps.
+    - `training.ipynb`: Notebook for developing the model training process.
+
+- **`docs/`**: Project documentation.
+    - `AlgoTrade_task.pdf`, `api_commented.txt`, `task-statement.md`
 
 - `requirements.txt`: Lists all Python package dependencies.
 
